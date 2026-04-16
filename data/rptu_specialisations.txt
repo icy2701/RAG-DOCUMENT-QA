@@ -1,0 +1,15 @@
+RPTU Kaiserslautern-Landau: Computer Science Specialisations
+
+RPTU (Rheinland-Pfälzische Technische Universität Kaiserslautern-Landau) is a technical university in Germany offering strong computer science programs with various specialisation tracks. The university is particularly well-known for its applied and research-oriented approach, combining theoretical foundations with practical skills demanded by modern industry.
+
+The Artificial Intelligence and Machine Learning specialisation is one of the most popular tracks. It covers the mathematical foundations of ML including linear algebra, probability theory, and optimisation. Students study classical machine learning algorithms, deep learning architectures (CNNs, RNNs, Transformers), reinforcement learning, and natural language processing. The curriculum emphasises both theoretical understanding and hands-on implementation using frameworks like PyTorch and TensorFlow.
+
+The Software Engineering and Distributed Systems specialisation focuses on building reliable, scalable software systems. Topics include software architecture patterns, microservices, containerisation with Docker and Kubernetes, continuous integration and deployment (CI/CD), and cloud platforms like AWS and Azure. Students learn design patterns, testing strategies, and how to manage complexity in large codebases.
+
+The Data Science and Analytics specialisation bridges statistics, computer science, and domain knowledge. Core courses include statistical modelling, data visualisation, big data processing with Apache Spark, database systems (SQL and NoSQL), and data pipelines. Students learn to extract actionable insights from complex datasets and communicate findings clearly to both technical and non-technical audiences.
+
+The Cybersecurity specialisation addresses the growing need for security expertise. It covers cryptography, network security, secure software development, penetration testing, and threat modelling. Students learn to identify vulnerabilities, implement defensive systems, and respond to security incidents.
+
+Human-Computer Interaction (HCI) is another offered track, exploring how people interact with technology. It covers user research, interface design, accessibility, prototyping, and usability testing. Students learn to design software systems that are intuitive and inclusive.
+
+Beyond specialisations, RPTU encourages interdisciplinary collaboration. Research groups at RPTU are active in areas like autonomous systems, intelligent networks, formal verification, and explainable AI. Students have opportunities to participate in funded research projects and collaborate with industry partners through the university's extensive network.

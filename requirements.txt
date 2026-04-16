@@ -1,0 +1,10 @@
+langchain
+langchain-community
+faiss-cpu
+sentence-transformers
+transformers
+torch
+fastapi
+uvicorn
+pytest
+python-multipart
