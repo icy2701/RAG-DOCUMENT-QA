@@ -61,4 +61,12 @@ Expected output: (384,)
 - Chunk overlap ensures sentences at boundaries are not lost between chunks
 - Metadata (source filename) is preserved in every chunk for traceability
 
+### Day 3 — FAISS Vector Store (src/vectorstore.py)
+- Loads the all-MiniLM-L6-v2 embedding model from HuggingFace (~80MB, cached after first run)
+- Converts all 24 chunks into 384-number vectors using HuggingFaceEmbeddings
+- Stores all vectors in a FAISS index — a catalogue system for meaning-based search
+- Saves the index to disk in faiss_index/ so it persists between runs
+- Tested retrieval with "what is machine learning?" — all 3 results correctly returned from ml_basics.txt
+- k=3 means return the 3 nearest vectors to the query vector
+- FAISS always returns k results even for irrelevant queries — similarity thresholding to be added later
 
