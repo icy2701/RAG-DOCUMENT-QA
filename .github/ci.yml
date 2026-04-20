@@ -1,0 +1,46 @@
+# Name of this workflow — shows up in GitHub's Actions tab
+name: RAG CI
+
+# When to run this workflow
+# on push to main branch OR when a pull request targets main
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    # Run on the latest Ubuntu Linux — standard for CI pipelines
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1 — Check out the code
+      # This downloads your repository code onto the GitHub runner machine
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2 — Set up Python 3.11
+      # Installs Python on the runner machine
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      # Step 3 — Install dependencies
+      # Same as running pip install -r requirements.txt locally
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Step 4 — Build FAISS index
+      # The runner has no saved faiss_index/ — we build it fresh
+      # We run vectorstore.py which loads ingest.py, chunks docs,
+      # embeds everything, and saves the index to disk
+      - name: Build FAISS index
+        run: python src/vectorstore.py
+
+      # Step 5 — Run pytest
+      # Runs all tests in tests/ and reports pass/fail
+      # If any test fails, the whole CI job fails and GitHub shows a red cross
+      - name: Run tests
+        run: pytest tests/test_api.py -v
