@@ -1,3 +1,4 @@
+[![RAG CI](https://github.com/icy2701/RAG-DOCUMENT-QA/actions/workflows/ci.yml/badge.svg)](https://github.com/icy2701/RAG-DOCUMENT-QA/actions/workflows/ci.yml)
 # RAG Document Q&A System
 
 A Retrieval-Augmented Generation (RAG) system that answers questions using your own documents as the knowledge base — not from the AI's memory, from YOUR files.
