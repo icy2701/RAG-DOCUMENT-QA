@@ -1,82 +1,62 @@
 import os
 import sys
+import shutil
 
-# Add src/ to Python's path so it can find our other files
-# os.path.abspath(__file__) → full path of this file
-# os.path.dirname(...)      → goes up to src/ folder
-# sys.path.append(...)      → adds src/ to Python's search list
+# Add src/ to Python's path so imports work correctly
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# asynccontextmanager lets us write the startup and shutdown logic
-# of our server in one single function using yield
-# Everything before yield = startup, everything after yield = shutdown
 from contextlib import asynccontextmanager
 
-# FastAPI is the framework that creates our web server
-# It handles receiving requests and sending responses over HTTP
-from fastapi import FastAPI
+# FastAPI is the web framework
+from fastapi import FastAPI, UploadFile, File, HTTPException
 
-# BaseModel lets us define exactly what shape incoming data must be
-# If someone sends wrong data, FastAPI automatically rejects it
-# before it even reaches our code
+# UploadFile — FastAPI's type for receiving uploaded files over HTTP
+# File       — used as a default value to tell FastAPI this parameter
+#              is a file upload, not a regular form field
+# HTTPException — lets us return proper error responses with status codes
+#                 for example 400 Bad Request if someone uploads a PDF
+
+# BaseModel for defining the shape of JSON input
 from pydantic import BaseModel
 
-# Same imports we used in rag_chain.py
-# We need these to load our models and FAISS index when server starts
+# LangChain components — same as before
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.document_loaders import TextLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# flan-t5 components — same as before
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 # ── GLOBAL VARIABLES ─────────────────────────────────────────────────────────
 
-# We declare these as None now and fill them during startup
-# They live outside all functions so every endpoint can access them
-# Think of these as empty shelves — the lifespan function puts models on them
-# once at startup and they stay there for the entire life of the server
+# These are None at start and get filled during the lifespan startup
+# They stay in memory for the entire life of the server
+# Every endpoint reads from these — no reloading per request
 embeddings = None
 vectorstore = None
 tokenizer = None
 model = None
 
-# ── LIFESPAN FUNCTION ─────────────────────────────────────────────────────────
+# ── LIFESPAN ──────────────────────────────────────────────────────────────────
 
-# @asynccontextmanager turns this function into a lifespan manager
-# FastAPI calls this function when the server starts and stops
-# Everything BEFORE yield runs on startup — we load all models here
-# Everything AFTER yield runs on shutdown — we could clean up here
-# yield is the dividing line between startup and shutdown logic
-# This replaces the old @app.on_event("startup") which is now deprecated
-# (deprecated means still works but will be removed in future versions)
+# Everything before yield runs on startup
+# Everything after yield runs on shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
-    # global tells Python we want to modify the global variables above
-    # without this keyword Python would create new local variables
-    # inside this function and the globals would stay None forever
     global embeddings, vectorstore, tokenizer, model
 
     print("Server starting — loading models...")
 
-    # Load the embedding model — must be the same one used to BUILD the index
-    # all-MiniLM-L6-v2 produces 384-number vectors
-    # If we used a different model here, queries would be in a different
-    # vector space than our stored chunks — search results would be garbage
+    # Load embedding model — must match the one used to build the index
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     print("Embedding model loaded.")
 
-    # Build the path to faiss_index/ regardless of where the script runs from
-    # os.path.abspath(__file__)              → /Users/.../src/main.py
-    # os.path.dirname(...)                   → /Users/.../src/
-    # os.path.dirname(...dirname(...))       → /Users/.../rag-document-qa/
-    # os.path.join(BASE_DIR, "faiss_index")  → /Users/.../rag-document-qa/faiss_index
+    # Build path to saved FAISS index
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     FAISS_PATH = os.path.join(BASE_DIR, "faiss_index")
 
-    # Load the FAISS index we saved in vectorstore.py
-    # Much faster than rebuilding from scratch every time the server starts
-    # allow_dangerous_deserialization=True is required because FAISS uses
-    # pickle format to save — LangChain forces you to confirm you trust the file
-    # Since we created it ourselves, we trust it completely
+    # Load the saved FAISS index from disk
     vectorstore = FAISS.load_local(
         FAISS_PATH,
         embeddings,
@@ -84,100 +64,56 @@ async def lifespan(app: FastAPI):
     )
     print(f"FAISS index loaded with {vectorstore.index.ntotal} vectors.")
 
-    # Load flan-t5 tokenizer — converts text to numbers the model understands
-    # Already downloaded from Day 4 so loads from local cache instantly
+    # Load flan-t5 tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
-
-    # Load flan-t5 model — the neural network that generates answers
-    # ForSeq2SeqLM means sequence-to-sequence — text in, text out
     model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
     print("flan-t5 loaded.")
 
     print("All models ready. Server accepting requests.")
-
-    # yield is the dividing line
-    # The server is now running and handling requests
-    # Everything above ran at startup, everything below runs at shutdown
     yield
-
-    # Shutdown logic goes here if needed
-    # For example: closing database connections, saving state, etc.
-    # We don't need anything here for this project
     print("Server shutting down.")
 
-# ── CREATE THE APP ────────────────────────────────────────────────────────────
+# ── CREATE APP ────────────────────────────────────────────────────────────────
 
-# FastAPI() creates the entire web application
-# title= is the name shown on the /docs page
-# lifespan=lifespan tells FastAPI to use our lifespan function
-# for startup and shutdown — this is how models get loaded
 app = FastAPI(title="RAG Document Q&A", lifespan=lifespan)
 
-# ── DEFINE INPUT SCHEMA ───────────────────────────────────────────────────────
+# ── INPUT SCHEMA ──────────────────────────────────────────────────────────────
 
-# This class defines exactly what a valid /ask request must contain
-# question: str    → must be a text string, required, no default
-# top_k: int = 3   → must be a number, optional, defaults to 3
-# Pydantic validates this automatically — wrong types or missing required
-# fields are rejected with a 422 error before our code even runs
+# Defines the required shape of a /ask request body
+# question is required, top_k defaults to 3
 class Question(BaseModel):
     question: str
     top_k: int = 3
 
 # ── HEALTH ENDPOINT ───────────────────────────────────────────────────────────
 
-# @app.get("/health") registers this function as the handler for GET /health
-# GET means this endpoint can be accessed by typing the URL in a browser
-# /health is the standard "is the server alive?" check in all real APIs
-# Monitoring systems ping this every few seconds to confirm uptime
-# If it returns anything other than 200, alerts fire
+# Simple liveness check — returns 200 if server is running
 @app.get("/health")
 def health_check():
-    # We return a Python dictionary
-    # FastAPI automatically converts it to JSON: {"status": "ok"}
-    # HTTP 200 is returned automatically when a function completes without error
     return {"status": "ok"}
 
 # ── ASK ENDPOINT ──────────────────────────────────────────────────────────────
 
-# @app.post("/ask") registers this function as the handler for POST /ask
-# POST is used when we're sending data TO the server (our question)
-# GET is for receiving data FROM the server (like loading a webpage)
-# FastAPI reads the incoming JSON, validates it against the Question schema,
-# and passes it to this function already parsed as a Question object
 @app.post("/ask")
 def ask(question_input: Question):
 
-    # RETRIEVE — find the most relevant chunks from FAISS
-    # question_input.question → the actual question string
-    # question_input.top_k    → how many results to return (default 3)
-    # similarity_search converts the question to a vector internally
-    # then finds the top_k stored vectors closest to it in meaning
+    # Convert question to vector, search FAISS for top_k closest chunks
     results = vectorstore.similarity_search(
         question_input.question,
         k=question_input.top_k
     )
 
-    # FORMAT CONTEXT — join chunk texts into one block
-    # r.page_content is the actual text of each retrieved chunk
-    # "\n\n".join() puts double newlines between chunks as separators
-    # This combined text is the "open book" we hand to flan-t5
+    # Join retrieved chunks into one context block
     context = "\n\n".join([r.page_content for r in results])
 
-    # BUILD PROMPT — the structured instruction we give flan-t5
-    # "based on the context below" tells the model to use OUR documents
-    # not its own training memory
-    # "Write at least 3 sentences" encourages longer detailed answers
-    # "Detailed Answer:" signals where the model should start generating
+    # Build the prompt — instruct flan-t5 to answer from context only
     prompt = f"""Answer the question in detail using the context below. Write at least 3 sentences.
 Context: {context}
 Question: {question_input.question}
 Detailed Answer:"""
 
-    # TOKENIZE — convert the prompt text into numbers the model understands
-    # return_tensors="pt" → return PyTorch tensors (the format the model needs)
-    # truncation=True     → if prompt exceeds max_length, cut it down gracefully
-    # max_length=512      → flan-t5-base has a hard limit of 512 input tokens
+    # Tokenize the prompt into numbers the model understands
+    # truncation=True handles flan-t5's 512 token input limit
     inputs = tokenizer(
         prompt,
         return_tensors="pt",
@@ -185,36 +121,114 @@ Detailed Answer:"""
         max_length=512
     )
 
-    # GENERATE — run flan-t5 on the tokenized prompt
-    # **inputs unpacks the dictionary of tensors into the function
-    # max_new_tokens=512 allows up to 512 tokens in the answer (~400 words)
-    # The model generates tokens one at a time until it decides it's done
-    # or hits the max_new_tokens limit
+    # Generate the answer — model thinks here
     outputs = model.generate(**inputs, max_new_tokens=512)
 
-    # DECODE — convert the model's number output back to readable English
-    # outputs[0] gets the first generated sequence
-    # skip_special_tokens=True removes internal tokens like <pad> and </s>
-    # that would appear as garbage text if left in
+    # Decode the output numbers back to readable English
     answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    # BUILD SOURCES — extract metadata from each retrieved chunk
-    # r.metadata is the dictionary attached to each chunk
-    # it contains {"source": "data/ml_basics.txt"} for each chunk
-    # returning this lets the user verify WHERE the answer came from
+    # Extract source filenames from chunk metadata
     sources = [r.metadata for r in results]
 
-    # RETURN RESPONSE — FastAPI converts this dictionary to JSON automatically
-    # Final response looks like:
-    # {
-    #   "answer": "Overfitting occurs when a model learns...",
-    #   "sources": [
-    #     {"source": "data/ml_basics.txt"},
-    #     {"source": "data/ml_basics.txt"},
-    #     {"source": "data/ml_basics.txt"}
-    #   ]
-    # }
     return {
         "answer": answer,
         "sources": sources
+    }
+
+# ── UPLOAD ENDPOINT ───────────────────────────────────────────────────────────
+
+# @app.post("/upload") creates a new endpoint at /upload
+# UploadFile is FastAPI's type for receiving files over HTTP
+# File(...) tells FastAPI this is a required file upload field
+# The whole function is async because file reading is I/O bound —
+# async lets the server handle other requests while waiting for the file
+@app.post("/upload")
+async def upload_document(file: UploadFile = File(...)):
+
+    # We use global because we need to modify the vectorstore variable
+    # that was set during startup — without global we'd create a new
+    # local variable and the global one would stay unchanged
+    global vectorstore
+
+    # ── VALIDATION ────────────────────────────────────────────────────────────
+
+    # Check that the uploaded file is a .txt file
+    # file.filename is the original name of the file the user uploaded
+    # We only support .txt for now — PDFs and Word docs come later
+    # HTTPException with status_code=400 means "Bad Request" —
+    # the server understood the request but the input is invalid
+    if not file.filename.endswith(".txt"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only .txt files are supported. Please upload a plain text file."
+        )
+
+    # ── SAVE FILE TO DISK ─────────────────────────────────────────────────────
+
+    # Build the path where we'll save the uploaded file
+    # We save it into data/ so it's alongside our existing documents
+    # os.path.basename() extracts just the filename from any path
+    # preventing path traversal attacks like "../../etc/passwd"
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    save_path = os.path.join(BASE_DIR, "data", os.path.basename(file.filename))
+
+    # Read the file bytes from the upload and write them to disk
+    # await file.read() reads the entire file content as bytes
+    # "wb" means write binary — correct for any file type
+    content = await file.read()
+    with open(save_path, "wb") as f:
+        f.write(content)
+
+    print(f"File saved to {save_path}")
+
+    # ── CHUNK THE NEW DOCUMENT ────────────────────────────────────────────────
+
+    # Load the saved file using TextLoader
+    # We load just this one file — not the whole data/ folder
+    # This is much faster than reprocessing all documents
+    loader = TextLoader(save_path, encoding="utf-8")
+    new_docs = loader.load()
+
+    # Split into chunks using same settings as our original pipeline
+    # chunk_size=500 and chunk_overlap=50 must match what we used before
+    # so new chunks are consistent with existing ones in the index
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=50
+    )
+    new_chunks = splitter.split_documents(new_docs)
+    print(f"New document split into {len(new_chunks)} chunks.")
+
+    # ── EMBED AND MERGE INTO FAISS ────────────────────────────────────────────
+
+    # Build a brand new small FAISS index from just the new chunks
+    # FAISS.from_documents() embeds all new chunks and creates a new index
+    # We use the same embeddings model as the main index —
+    # both indexes must use the same model to be in the same vector space
+    new_store = FAISS.from_documents(new_chunks, embeddings)
+    print(f"New FAISS store built with {new_store.index.ntotal} vectors.")
+
+    # merge_from() adds all vectors from new_store into vectorstore
+    # The existing vectors in vectorstore are completely untouched
+    # The new vectors are appended to the end
+    # This is like adding new pages to an existing filing cabinet
+    # without disturbing any of the existing pages
+    vectorstore.merge_from(new_store)
+    print(f"Merged. Total vectors now: {vectorstore.index.ntotal}")
+
+    # ── SAVE UPDATED INDEX TO DISK ────────────────────────────────────────────
+
+    # Save the updated index back to disk
+    # This ensures the new document survives a server restart
+    # Without this, the merged vectors exist in memory only —
+    # if the server restarts it would load the old index without the new doc
+    FAISS_PATH = os.path.join(BASE_DIR, "faiss_index")
+    vectorstore.save_local(FAISS_PATH)
+    print("Updated FAISS index saved to disk.")
+
+    # Return a success response with details about what was processed
+    return {
+        "message": f"Document '{file.filename}' uploaded and indexed successfully.",
+        "chunks_added": len(new_chunks),
+        "total_vectors": vectorstore.index.ntotal
     }

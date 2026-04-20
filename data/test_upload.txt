@@ -1,0 +1,11 @@
+Neural Networks and Deep Learning
+
+A neural network is a computational system loosely inspired by the structure of biological brains. It consists of layers of interconnected nodes called neurons. Each connection has a weight that gets adjusted during training. The input layer receives raw data, hidden layers transform it through learned representations, and the output layer produces the final prediction.
+
+Deep learning refers to neural networks with many hidden layers — sometimes hundreds. The word "deep" refers to the depth of these layers. Deep networks can learn increasingly abstract features at each layer. In image recognition, early layers detect edges, middle layers detect shapes, and deeper layers detect entire objects like faces or cars.
+
+Backpropagation is the algorithm that trains neural networks. It works by calculating how much each weight contributed to the error in the output, then adjusting all weights slightly in the direction that reduces that error. This process repeats thousands of times across the training data until the network performs well.
+
+Convolutional Neural Networks (CNNs) are designed for image data. They use convolutional filters that slide across the image detecting local patterns regardless of where they appear. This makes them translation invariant — a cat in the top left and a cat in the bottom right produce similar activations.
+
+Recurrent Neural Networks (RNNs) are designed for sequential data like text or time series. They maintain a hidden state that carries information from previous steps in the sequence. Transformers have largely replaced RNNs for language tasks — they use attention mechanisms to relate any word in a sequence to any other word directly, regardless of distance.
