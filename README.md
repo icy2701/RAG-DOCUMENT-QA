@@ -3,7 +3,7 @@
 > Ask questions about your own documents. Get answers with sources. No hallucination.
 
 ![CI](https://github.com/icy2701/RAG-DOCUMENT-QA/actions/workflows/ci.yml/badge.svg)
-![Docker Pulls](https://img.shields.io/docker/pulls/aisi27/rag-document-qa?logo=docker)
+![Docker](https://img.shields.io/docker/image-size/aisi27/rag-document-qa/v1.0?logo=docker&label=docker)
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?logo=fastapi)
 ![LangChain](https://img.shields.io/badge/LangChain-enabled-blueviolet)
