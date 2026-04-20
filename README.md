@@ -70,3 +70,12 @@ Expected output: (384,)
 - k=3 means return the 3 nearest vectors to the query vector
 - FAISS always returns k results even for irrelevant queries — similarity thresholding to be added later
 
+### Day 4 — flan-t5 LLM Integration (src/rag_chain.py)
+- Loaded saved FAISS index from disk instead of rebuilding every run
+- Integrated google/flan-t5-base as the language model — free, local, no API key needed
+- Built the complete RAG pipeline in one ask() function:
+  question → embed → FAISS retrieves top 3 chunks → format as context → prompt flan-t5 → answer
+- Prompt template instructs flan-t5 to answer ONLY from provided context, not training memory
+- Tested 5 questions — all retrieved correct sources (ML questions → ml_basics.txt, Python questions → python_programming.txt)
+- Answers are short due to flan-t5 being a small model — improves with larger models later
+- AutoTokenizer converts text to numbers, model.generate() thinks, tokenizer.decode() converts back to text
