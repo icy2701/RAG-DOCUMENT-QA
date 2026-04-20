@@ -40,6 +40,22 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
+## Running the API
+
+uvicorn src.main:app --reload
+
+Then open http://127.0.0.1:8000/docs in your browser to test interactively.
+
+## API Endpoints
+
+POST /ask
+Send a question and get an answer back with sources.
+Request body: {"question": "What is overfitting?", "top_k": 3}
+Response: {"answer": "...", "sources": [{"source": "data/ml_basics.txt"}, ...]}
+
+GET /health
+Returns {"status": "ok"} to confirm the server is running.
+
 ## Test Embeddings
 
 python3 test_embed.py
@@ -76,6 +92,14 @@ Expected output: (384,)
 - Built the complete RAG pipeline in one ask() function:
   question → embed → FAISS retrieves top 3 chunks → format as context → prompt flan-t5 → answer
 - Prompt template instructs flan-t5 to answer ONLY from provided context, not training memory
-- Tested 5 questions — all retrieved correct sources (ML questions → ml_basics.txt, Python questions → python_programming.txt)
-- Answers are short due to flan-t5 being a small model — improves with larger models later
+- Tested 5 questions — all retrieved correct sources
 - AutoTokenizer converts text to numbers, model.generate() thinks, tokenizer.decode() converts back to text
+
+### Day 5 — FastAPI /ask Endpoint (src/main.py)
+- Wrapped the entire RAG pipeline in a FastAPI web server
+- POST /ask endpoint accepts a question and top_k, returns answer and sources as JSON
+- GET /health endpoint confirms server is running — standard pattern in all production APIs
+- Input validated via Pydantic BaseModel — wrong input is rejected automatically before reaching our code
+- Models loaded once on startup and kept in memory — fast responses for every request
+- Interactive API docs auto-generated at http://127.0.0.1:8000/docs by FastAPI
+- Tested 3 questions via /docs — correct sources returned for all questions
